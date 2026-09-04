@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mic, Square, Upload } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 
 type RecorderState = "idle" | "recording" | "recorded";
 
@@ -79,23 +78,27 @@ export default function NewLecturePage() {
     setError("");
 
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not signed in");
-
       const extension =
         uploadedFile?.name.split(".").pop() ??
         (recordedBlob?.type.includes("webm") ? "webm" : "m4a");
-      const path = `${user.id}/${crypto.randomUUID()}.${extension}`;
+      const contentType =
+        uploadedFile?.type || recordedBlob?.type || "application/octet-stream";
 
-      const { error: uploadError } = await supabase.storage
-        .from("lectures")
-        .upload(path, audio, {
-          contentType: uploadedFile?.type || recordedBlob?.type,
-        });
-      if (uploadError) throw uploadError;
+      const presignRes = await fetch("/api/uploads/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extension, contentType }),
+      });
+      const presignBody = await presignRes.json();
+      if (!presignRes.ok)
+        throw new Error(presignBody.error ?? "Failed to prepare upload");
+
+      const putRes = await fetch(presignBody.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: audio,
+      });
+      if (!putRes.ok) throw new Error("Failed to upload audio");
 
       const res = await fetch("/api/lectures", {
         method: "POST",
@@ -103,7 +106,7 @@ export default function NewLecturePage() {
         body: JSON.stringify({
           title,
           course,
-          audioPath: path,
+          audioPath: presignBody.key,
           durationSeconds: recorderState === "recorded" ? seconds : null,
         }),
       });
