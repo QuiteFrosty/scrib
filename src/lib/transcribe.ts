@@ -1,7 +1,14 @@
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let openai: OpenAI | undefined;
+
+function getOpenAI(): OpenAI {
+  if (!openai) {
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openai;
+}
 
 /**
  * Transcribes a lecture recording with Whisper. `filename` should keep the
@@ -12,7 +19,7 @@ export async function transcribeAudio(
   filename: string
 ): Promise<string> {
   const file = await toFile(audio, filename);
-  const result = await openai.audio.transcriptions.create({
+  const result = await getOpenAI().audio.transcriptions.create({
     file,
     model: "whisper-1",
     response_format: "text",
