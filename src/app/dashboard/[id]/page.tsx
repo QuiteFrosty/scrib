@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { presignDownload } from "@/lib/r2";
 import { LectureView } from "@/components/LectureView";
 
 export default async function LecturePage({
@@ -19,7 +18,11 @@ export default async function LecturePage({
 
   if (!lecture) notFound();
 
-  const audioUrl = await presignDownload(lecture.audio_path);
+  const { data: signedUrl } = await supabase.storage
+    .from("lectures")
+    .createSignedUrl(lecture.audio_path, 60 * 60);
 
-  return <LectureView lecture={lecture} audioUrl={audioUrl} />;
+  return (
+    <LectureView lecture={lecture} audioUrl={signedUrl?.signedUrl ?? null} />
+  );
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { downloadObject } from "@/lib/r2";
 import { transcribeAudio } from "@/lib/transcribe";
 import { generateLectureNotes } from "@/lib/notes";
 
@@ -13,7 +12,7 @@ export async function POST(
 
   // Verify the caller owns this lecture using the request-scoped client
   // (RLS enforces this), then do the actual work with the admin client so
-  // the multi-step DB updates aren't blocked by RLS.
+  // storage downloads and multi-step updates aren't blocked by RLS.
   const supabase = await createClient();
   const {
     data: { user },
@@ -41,7 +40,13 @@ export async function POST(
       .update({ status: "transcribing", error_message: null })
       .eq("id", id);
 
-    const audioFile = await downloadObject(lecture.audio_path);
+    const { data: audioFile, error: downloadError } = await admin.storage
+      .from("lectures")
+      .download(lecture.audio_path);
+
+    if (downloadError || !audioFile) {
+      throw new Error(downloadError?.message ?? "Could not download audio");
+    }
 
     const transcript = await transcribeAudio(
       audioFile,

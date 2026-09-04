@@ -48,7 +48,29 @@ create policy "Users can delete their own lectures"
   on public.lectures for delete
   using (auth.uid() = user_id);
 
--- Lecture audio itself is NOT stored in Supabase — it lives in a Cloudflare R2
--- bucket (see README.md for setup). `lectures.audio_path` just stores the R2
--- object key ("<user_id>/<uuid>.<ext>"), and access is scoped per-user by
--- presigned URLs generated server-side (src/lib/r2.ts), not by Postgres RLS.
+-- Storage bucket for lecture audio. Files are stored under `<user_id>/<uuid>.<ext>`
+-- so the RLS policies below can key off the first path segment.
+insert into storage.buckets (id, name, public)
+values ('lectures', 'lectures', false)
+on conflict (id) do nothing;
+
+create policy "Users can upload their own lecture audio"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'lectures'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can read their own lecture audio"
+  on storage.objects for select
+  using (
+    bucket_id = 'lectures'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can delete their own lecture audio"
+  on storage.objects for delete
+  using (
+    bucket_id = 'lectures'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );

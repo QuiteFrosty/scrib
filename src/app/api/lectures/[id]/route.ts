@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { deleteObject } from "@/lib/r2";
 
 export async function DELETE(
   _request: Request,
@@ -23,7 +22,7 @@ export async function DELETE(
     .single();
 
   if (lecture?.audio_path) {
-    await deleteObject(lecture.audio_path);
+    await supabase.storage.from("lectures").remove([lecture.audio_path]);
   }
 
   const { error } = await supabase.from("lectures").delete().eq("id", id);
